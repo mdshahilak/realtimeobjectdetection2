@@ -3,7 +3,7 @@ import cv2
 import csv
 import os
 
-thres = 0.5
+thres = 0.555
 
 cap = cv2.VideoCapture(0)
 cap.set(3, 1280)
