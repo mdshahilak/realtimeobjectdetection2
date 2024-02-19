@@ -1,7 +1,9 @@
 import datetime
 import cv2
+import csv
+import os
 
-thres = 0.45
+thres = 0.5
 
 cap = cv2.VideoCapture(0)
 cap.set(3, 1280)
@@ -22,37 +24,70 @@ net.setInputScale(1.0 / 127.5)
 net.setInputMean((127.5, 127.5, 127.5))
 net.setInputSwapRB(True)
 
-while True:
-    success, img = cap.read()
+csv_file = 'object_detection_data.csv'
+image_folder = 'captured_animals'
 
-    if not success:
-        break
+# Create the image folder if it doesn't exist
+os.makedirs(image_folder, exist_ok=True)
 
-    classIds, confs, bbox = net.detect(img, confThreshold=thres)
+with open(csv_file, mode='w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(['Category', 'Date', 'Time', 'Confidence', 'Image Path'])
 
-    if len(classIds) != 0:
-        for classId, confidence, box in zip(classIds.flatten(), confs.flatten(), bbox):
-            timestamp = datetime.datetime.now()
+    while True:
+        success, img = cap.read()
 
-            if classId > 0 and classId <= len(classNames):
-                class_name = classNames[classId - 1].lower()
-            else:
-                class_name = "unknown"
+        if not success:
+            break
 
-            object_name = class_name if "person" in class_name or "vehicle" in class_name else "object"
-            object_data = f"{object_name} at {timestamp}\n"
+        classIds, confs, bbox = net.detect(img, confThreshold=thres)
 
-            with open('object_detection_data.txt', 'a') as text_file:
-                text_file.write(object_data)
+        if len(classIds) != 0:
+            for classId, confidence, box in zip(classIds.flatten(), confs.flatten(), bbox):
+                timestamp = datetime.datetime.now()
 
-            cv2.rectangle(img, box, color=(0, 255, 0), thickness=2)
-            cv2.putText(img, object_name.upper(), (box[0] + 10, box[1] + 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2.putText(img, str(round(confidence * 100, 2)), (box[0] + 200, box[1] + 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                # Extract date and time components
+                date = timestamp.date()
+                time = timestamp.strftime("%H:%M:%S")
 
-    cv2.imshow("Object Detection", img)
+                if classId > 0 and classId <= len(classNames):
+                    class_name = classNames[classId - 1].lower()
+                else:
+                    class_name = "unknown"
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+                # Initialize the image path variable
+                animal_image_path = ""
+
+                # Check if the detected object is an animal
+                animals = ['cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe']
+                if class_name in "person" in class_name:
+                    object_category = "person"
+                elif class_name in animals:
+                    object_category = "animal"
+
+                    # Capture and save the image
+                    animal_image_path = os.path.join(image_folder, f'{class_name}_{timestamp.strftime("%Y%m%d%H%M%S")}.jpg')
+                    cv2.imwrite(animal_image_path, img[box[1]:box[1] + box[3], box[0]:box[0] + box[2]])
+                elif class_name in ['bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat']:
+                    object_category = "vehicle"
+                else:
+                    object_category = "object"
+
+                object_data = [object_category, date, time, round(confidence * 100, 2), animal_image_path]
+
+                # Write data to CSV
+                writer.writerow(object_data)
+
+                cv2.rectangle(img, box, color=(0, 255, 0), thickness=2)
+                cv2.putText(img, object_category.upper(), (box[0] + 10, box[1] + 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                            (0, 255, 0), 2)
+                cv2.putText(img, f"Confidence: {round(confidence * 100, 2)}%", (box[0] + 10, box[1] + 60),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+        cv2.imshow("Object Detection", img)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
 cap.release()
 cv2.destroyAllWindows()
