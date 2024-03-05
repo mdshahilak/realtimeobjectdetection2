@@ -2,6 +2,15 @@ import datetime
 import cv2
 import csv
 import os
+from google.oauth2 import service_account
+import gspread
+
+# Set up Google Sheets API credentials
+credentials = service_account.Credentials.from_service_account_file('year-project.json', scopes=['https://www.googleapis.com/auth/spreadsheets'])
+
+# Open the Google Sheet
+gc = gspread.authorize(credentials)
+sheet = gc.open('Your Google Sheet Name').sheet1  # Replace with your sheet name
 
 thres = 0.555
 
@@ -25,7 +34,7 @@ net.setInputMean((127.5, 127.5, 127.5))
 net.setInputSwapRB(True)
 
 csv_file = 'object_detection_data.csv'
-image_folder = 'captured_animals'
+image_folder = 'captured_objects'
 
 # Create the image folder if it doesn't exist
 os.makedirs(image_folder, exist_ok=True)
@@ -56,27 +65,28 @@ with open(csv_file, mode='w', newline='') as file:
                     class_name = "unknown"
 
                 # Initialize the image path variable
-                animal_image_path = ""
+                object_image_path = ""
 
-                # Check if the detected object is an animal
-                animals = ['cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe']
-                if class_name in "person" in class_name:
-                    object_category = "person"
-                elif class_name in animals:
-                    object_category = "animal"
+                # Check if the detected object is a person or an animal
+                if class_name == "person" or class_name in ['cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe']:
+                    object_category = "person" if class_name == "person" else "animal"
 
                     # Capture and save the image
-                    animal_image_path = os.path.join(image_folder, f'{class_name}_{timestamp.strftime("%Y%m%d%H%M%S")}.jpg')
-                    cv2.imwrite(animal_image_path, img[box[1]:box[1] + box[3], box[0]:box[0] + box[2]])
+                    object_image_path = os.path.join(image_folder, f'{object_category}_{timestamp.strftime("%Y%m%d%H%M%S")}.jpg')
+                    cv2.imwrite(object_image_path, img[box[1]:box[1] + box[3], box[0]:box[0] + box[2]])
                 elif class_name in ['bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat']:
                     object_category = "vehicle"
                 else:
                     object_category = "object"
 
-                object_data = [object_category, date, time, round(confidence * 100, 2), animal_image_path]
+                # Check if the object category is not "object" before writing to CSV and Google Sheet
+                if object_category != "object":
+                    object_data = [object_category, date, time, round(confidence * 100, 2), object_image_path]
+                    # Write data to CSV
+                    writer.writerow(object_data)
 
-                # Write data to CSV
-                writer.writerow(object_data)
+                    # Write data to Google Sheet
+                    sheet.append_row(object_data)
 
                 cv2.rectangle(img, box, color=(0, 255, 0), thickness=2)
                 cv2.putText(img, object_category.upper(), (box[0] + 10, box[1] + 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
